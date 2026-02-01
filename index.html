@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SOS - FIXED LAYOUT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Inter:wght@400;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background: #020617; color: white; height: 100vh; width: 100vw; display: flex; flex-direction: column; align-items: center; overflow: hidden; margin: 0; padding: 5px; }
+        .title-font { font-family: 'Bungee', cursive; }
+        
+        /* Compact Wheel for more space */
+        .wheel-container { position: relative; width: 180px; height: 180px; transition: transform 4s cubic-bezier(0.1, 0, 0.2, 1); border-radius: 50%; border: 3px solid #3b82f6; }
+        .pointer { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 20px solid #ef4444; z-index: 100; }
+        
+        /* 22 Cards Grid - 5 columns, height adjusted to fit screen */
+        .card-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; width: 100%; max-width: 400px; margin-top: 5px; }
+        .card-item { height: 65px; perspective: 1000px; }
+        .card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; }
+        .flipped .card-inner { transform: rotateY(180deg); }
+        .card-back { background: #1e40af; border: 1px solid #3b82f6; position: absolute; inset: 0; backface-visibility: hidden; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; cursor: pointer; color: white; }
+        .card-front { background: white; color: #0f172a; transform: rotateY(180deg); position: absolute; inset: 0; backface-visibility: hidden; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-direction: column; font-size: 7px; font-weight: 900; text-align: center; padding: 2px; }
+        
+        .overlay-screen { display:none; position: fixed; inset: 0; z-index: 500; align-items: center; justify-content: center; flex-direction: column; text-align: center; }
+        #timer { font-size: 1.2rem; font-weight: 900; color: #fbbf24; height: 1.5rem; }
+    </style>
+</head>
+<body>
+
+<div id="winScreen" class="overlay-screen bg-black/95">
+    <h1 class="title-font text-5xl text-yellow-400 mb-2">VICTORY</h1>
+    <h2 id="winnerName" class="text-2xl font-black mb-8 uppercase"></h2>
+    <button onclick="location.reload()" class="bg-indigo-600 px-8 py-3 rounded-xl font-black">NEW MATCH</button>
+</div>
+
+<div id="deadScreen" class="overlay-screen bg-red-950/98">
+    <h1 class="title-font text-4xl mb-2">Eliminated</h1>
+    <p id="deathReason" class="text-red-200 font-bold uppercase mb-6 text-xs px-4"></p>
+    <button onclick="location.reload()" class="bg-white/10 px-6 py-2 rounded-xl text-xs">EXIT</button>
+</div>
+
+<div id="app" class="w-full h-full flex flex-col items-center justify-between py-2">
+    <div id="menu" class="flex flex-col items-center gap-4 mt-10">
+        <h1 class="title-font text-6xl text-yellow-400">SOS</h1>
+        <input type="text" id="nick" placeholder="NICKNAME" class="bg-slate-800 p-3 rounded-xl text-center font-black border-2 border-slate-600 outline-none w-56 uppercase">
+        <div class="flex gap-2 w-56">
+            <button id="hostBtn" class="flex-1 bg-indigo-600 p-3 rounded-xl font-black uppercase">Host</button>
+            <button id="joinBtn" class="flex-1 bg-slate-700 p-3 rounded-xl font-black uppercase">Join</button>
+        </div>
+        <div id="joinArea" class="hidden w-56">
+            <input type="text" id="roomCodeInput" placeholder="CODE" class="bg-slate-800 p-2 rounded-xl text-center w-full mb-2 font-black uppercase">
+            <button id="connectBtn" class="bg-green-600 w-full p-2 rounded-xl font-black uppercase">Connect</button>
+        </div>
+    </div>
+
+    <div id="lobby" class="hidden flex flex-col items-center gap-4 bg-slate-900 p-6 rounded-3xl border-2 border-blue-500 w-full max-w-xs">
+        <div id="displayCode" class="text-4xl font-black text-yellow-400"></div>
+        <div id="playerList" class="w-full text-center space-y-1 text-sm font-bold text-slate-300"></div>
+        <button id="startMatchBtn" class="hidden w-full bg-yellow-500 text-black py-3 rounded-xl font-black uppercase">Start Match</button>
+    </div>
+
+    <div id="gameUI" class="hidden w-full flex flex-col items-center gap-1">
+        <div id="scoreboard" class="flex flex-wrap gap-1 justify-center w-full text-[10px]"></div>
+        
+        <div id="timer"></div>
+        <h3 id="turnTxt" class="font-black text-yellow-400 uppercase text-[9px] tracking-widest h-4"></h3>
+        
+        <div class="relative flex justify-center items-center">
+            <div class="pointer"></div>
+            <div id="wheel" class="wheel-container"><canvas id="wheelCanvas" width="180" height="180"></canvas></div>
+            <button id="spinBtn" class="absolute inset-0 m-auto w-12 h-12 bg-white text-black rounded-full font-black text-[9px] hidden border-2 border-indigo-600 z-50 uppercase">Spin</button>
+        </div>
+
+        <div id="grid" class="card-grid"></div>
+    </div>
+</div>
+
+<div id="targetModal" class="hidden fixed inset-0 bg-black/95 z-[200] flex items-center justify-center p-6">
+    <div class="bg-slate-900 p-6 rounded-3xl border-2 border-yellow-400 w-full max-w-xs text-center">
+        <h3 class="title-font text-lg text-yellow-400 mb-4 uppercase">Target Victim</h3>
+        <div id="targetList" class="flex flex-col gap-2"></div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB_H1iynwIGh0jYmRMXGcbjdU3ELGwg4Po",
+      authDomain: "sos-game-67c4a.firebaseapp.com",
+      databaseURL: "https://sos-game-67c4a-default-rtdb.firebaseio.com",
+      projectId: "sos-game-67c4a",
+      storageBucket: "sos-game-67c4a.firebasestorage.app",
+      messagingSenderId: "313484944637",
+      appId: "1:313484944637:web:969fb36ec308909579ca94"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    let myId = Date.now().toString(), roomCode = "", isHost = false, spinning = false;
+
+    // EXACT 22 CARDS
+    const DECK_CARDS = [
+        ...Array(4).fill({id:'SOS', icon:'skull', label:'SOS'}),
+        ...Array(4).fill({id:'SHIELD', icon:'shield-alt', label:'SHIELD'}),
+        ...Array(2).fill({id:'U1', icon:'plus', label:'YOU +1'}),
+        ...Array(2).fill({id:'UM1', icon:'minus', label:'YOU -1'}),
+        ...Array(2).fill({id:'T1', icon:'user-plus', label:'THEM +1'}),
+        ...Array(2).fill({id:'TM1', icon:'user-minus', label:'THEM -1'}),
+        ...Array(2).fill({id:'SWAP', icon:'sync', label:'SWAP'}),
+        ...Array(2).fill({id:'STEAL', icon:'hand-holding-usd', label:'STEAL'}),
+        {id:'METEOR', icon:'meteor', label:'METEOR'},
+        {id:'JACKPOT', icon:'crown', label:'JACKPOT'}
+    ];
+
+    document.getElementById('hostBtn').onclick = async () => {
+        const n = document.getElementById('nick').value; if(!n) return;
+        isHost = true; roomCode = Math.random().toString(36).substring(2,8).toUpperCase();
+        await set(ref(db, `rooms/${roomCode}`), { status:'lobby', hostId:myId, wheelAngle:0, currentTurn:"", isWaiting:false, players:{[myId]:{id:myId, name:n, pts:5, shield:0}} });
+        joinLobby();
+    };
+
+    document.getElementById('joinBtn').onclick = () => document.getElementById('joinArea').classList.toggle('hidden');
+
+    document.getElementById('connectBtn').onclick = async () => {
+        roomCode = document.getElementById('roomCodeInput').value.toUpperCase();
+        const n = document.getElementById('nick').value; if(!n) return;
+        const snap = await get(ref(db, `rooms/${roomCode}`));
+        if(!snap.exists()) return;
+        await update(ref(db, `rooms/${roomCode}/players/${myId}`), { id:myId, name:n, pts:5, shield:0 });
+        joinLobby();
+    };
+
+    document.getElementById('startMatchBtn').onclick = async () => {
+        const deck = DECK_CARDS.sort(() => Math.random() - 0.5).map(c => ({...c, flipped:false}));
+        await update(ref(db, `rooms/${roomCode}`), { status: 'playing', deck: deck });
+    };
+
+    function joinLobby() {
+        document.getElementById('menu').classList.add('hidden'); 
+        document.getElementById('lobby').classList.remove('hidden');
+        document.getElementById('displayCode').innerText = roomCode;
+        onValue(ref(db, `rooms/${roomCode}`), (s) => {
+            const d = s.val(); if(!d) return;
+            const ps = Object.values(d.players);
+            document.getElementById('playerList').innerHTML = ps.map(p => `<div>${p.name}</div>`).join('');
+            if(isHost && ps.length > 1) document.getElementById('startMatchBtn').classList.remove('hidden');
+            if(d.status === 'playing') runGame();
+            if(d.winner) showWin(d.winner);
+            if(d.players[myId] && d.players[myId].pts <= 0) {
+                document.getElementById('deadScreen').style.display = 'flex';
+                document.getElementById('deathReason').innerText = d.players[myId].deathBy || "ELIMINATED";
+            }
+        });
+    }
+
+    function runGame() {
+        document.getElementById('lobby').classList.add('hidden'); 
+        document.getElementById('gameUI').classList.remove('hidden');
+        onValue(ref(db, `rooms/${roomCode}`), (s) => {
+            const d = s.val(); if(!d) return;
+            const alivePlayers = Object.values(d.players).filter(p => p.pts > 0);
+            drawWheel(alivePlayers);
+            document.getElementById('scoreboard').innerHTML = alivePlayers.map(p => `
+                <div class="p-1 px-2 bg-slate-800 rounded border ${p.id === d.currentTurn ? 'border-yellow-400':'border-transparent'}">
+                    ${p.name}: <b>${p.pts}</b> ${'🛡️'.repeat(p.shield)}
+                </div>`).join('');
+            
+            document.getElementById('wheel').style.transform = `rotate(${d.wheelAngle}deg)`;
+            document.getElementById('spinBtn').classList.toggle('hidden', !isHost || d.currentTurn !== "" || d.isWaiting || spinning);
+            
+            // Turn text stays hidden while spinning
+            if(spinning) {
+                document.getElementById('turnTxt').innerText = "SPINNING...";
+            } else {
+                document.getElementById('turnTxt').innerText = d.isWaiting ? "REVEALING..." : (d.currentTurn ? `${d.players[d.currentTurn].name.toUpperCase()} IS PICKING...` : "WAITING FOR SPIN...");
+            }
+
+            if(d.deck) {
+                document.getElementById('grid').innerHTML = d.deck.map((c, i) => `
+                <div class="card-item ${c.flipped?'flipped':''}" onclick="openCard(${i})">
+                    <div class="card-inner">
+                        <div class="card-back">${i+1}</div>
+                        <div class="card-front">
+                            <i class="fas fa-${c.icon} text-lg mb-1"></i><div class="uppercase">${c.label}</div>
+                        </div>
+                    </div>
+                </div>`).join('');
+            }
+        });
+    }
+
+    function drawWheel(ps) {
+        const canvas = document.getElementById('wheelCanvas'), ctx = canvas.getContext('2d');
+        ctx.clearRect(0,0,180,180);
+        const arc = (Math.PI*2) / ps.length;
+        ps.forEach((p, i) => {
+            ctx.beginPath(); ctx.fillStyle = i % 2 === 0 ? '#1e40af' : '#3b82f6';
+            ctx.moveTo(90,90); ctx.arc(90,90,90, i*arc, (i+1)*arc); ctx.fill();
+            ctx.save(); ctx.translate(90,90); ctx.rotate(i*arc + arc/2);
+            ctx.fillStyle = "white"; ctx.font = "900 10px Inter"; ctx.textAlign = "right";
+            ctx.fillText(p.name.toUpperCase(), 80, 4); ctx.restore();
+        });
+    }
+
+    document.getElementById('spinBtn').onclick = async () => {
+        spinning = true;
+        const s = await get(ref(db, `rooms/${roomCode}`));
+        const d = s.val();
+        const ps = Object.values(d.players).filter(p => p.pts > 0);
+        const rand = Math.floor(Math.random() * 360);
+        const newAngle = (d.wheelAngle || 0) + 1440 + rand;
+        
+        await update(ref(db, `rooms/${roomCode}`), { wheelAngle: newAngle });
+
+        setTimeout(async () => {
+            const pointerDegree = (360 - (newAngle % 360) + 270) % 360;
+            const winnerIdx = Math.floor(pointerDegree / (360 / ps.length)) % ps.length;
+            await update(ref(db, `rooms/${roomCode}`), { currentTurn: ps[winnerIdx].id });
+            spinning = false;
+        }, 4000); // Wait for wheel animation to finish
+    };
+
+    window.openCard = async (idx) => {
+        const s = await get(ref(db, `rooms/${roomCode}`));
+        const d = s.val();
+        if(d.currentTurn !== myId || d.deck[idx].flipped || d.isWaiting) return;
+        
+        const card = d.deck[idx];
+        await update(ref(db, `rooms/${roomCode}`), { [`deck/${idx}/flipped`]: true, isWaiting: true });
+
+        let count = 10;
+        const timerDiv = document.getElementById('timer');
+        const interval = setInterval(() => {
+            timerDiv.innerText = count;
+            count--;
+            if(count < 0) {
+                clearInterval(interval);
+                timerDiv.innerText = "";
+                processCardAction(card, d);
+            }
+        }, 1000);
+    };
+
+    async function processCardAction(card, d) {
+        if(['SOS', 'T1', 'TM1', 'STEAL', 'SWAP'].includes(card.id)) { 
+            showTargetList(card, d.players); 
+        } else {
+            let upd = {};
+            if(card.id === 'SHIELD') upd[`rooms/${roomCode}/players/${myId}/shield`] = (d.players[myId].shield || 0) + 1;
+            if(card.id === 'U1') upd[`rooms/${roomCode}/players/${myId}/pts`] = d.players[myId].pts + 1;
+            if(card.id === 'UM1') processCardHit(myId, d.players, upd, false);
+            if(card.id === 'JACKPOT') { upd[`rooms/${roomCode}/players/${myId}/pts`] = d.players[myId].pts + 2; upd[`rooms/${roomCode}/players/${myId}/shield`] = (d.players[myId].shield || 0) + 1; }
+            if(card.id === 'METEOR') { Object.values(d.players).forEach(p => { if(p.id !== myId && p.pts > 0) processCardHit(p.id, d.players, upd, false); }); }
+            await update(ref(db), upd);
+            checkEndGame();
+            resetTurn(d.deck);
+        }
+    }
+
+    function showTargetList(card, ps) {
+        document.getElementById('targetModal').classList.remove('hidden');
+        document.getElementById('targetList').innerHTML = Object.values(ps).filter(p => p.pts > 0 && (p.id !== myId || card.id === 'SOS')).map(p => `
+            <button onclick="executeAction('${p.id}', '${card.id}')" class="bg-indigo-600 p-3 rounded-xl font-black uppercase text-xs text-white">${p.name}</button>
+        `).join('');
+    }
+
+    window.executeAction = async (tid, cid) => {
+        const s = await get(ref(db, `rooms/${roomCode}`));
+        const d = s.val();
+        let upd = {};
+        if(cid === 'SOS') processCardHit(tid, d.players, upd, true);
+        if(cid === 'TM1') processCardHit(tid, d.players, upd, false);
+        if(cid === 'T1') upd[`rooms/${roomCode}/players/${tid}/pts`] = d.players[tid].pts + 1;
+        if(cid === 'STEAL') { processCardHit(tid, d.players, upd, false); upd[`rooms/${roomCode}/players/${myId}/pts`] = d.players[myId].pts + 1; }
+        if(cid === 'SWAP') { upd[`rooms/${roomCode}/players/${myId}/pts`] = d.players[tid].pts; upd[`rooms/${roomCode}/players/${tid}/pts`] = d.players[myId].pts; }
+        await update(ref(db), upd);
+        document.getElementById('targetModal').classList.add('hidden');
+        checkEndGame();
+        resetTurn(d.deck);
+    };
+
+    async function resetTurn(currentDeck) {
+        const newDeck = currentDeck.map(c => ({...c, flipped: false})).sort(() => Math.random() - 0.5);
+        await update(ref(db, `rooms/${roomCode}`), { isWaiting: false, currentTurn: "", deck: newDeck });
+    }
+
+    function processCardHit(uid, players, upd, isSOS) {
+        const p = players[uid];
+        if(p.shield > 0) {
+            upd[`rooms/${roomCode}/players/${uid}/shield`] = p.shield - 1;
+        } else {
+            if(isSOS) {
+                upd[`rooms/${roomCode}/players/${uid}/pts`] = 0;
+                upd[`rooms/${roomCode}/players/${uid}/deathBy`] = "KILLED BY SOS!";
+            } else {
+                upd[`rooms/${roomCode}/players/${uid}/pts`] = Math.max(0, p.pts - 1);
+            }
+        }
+    }
+
+    async function checkEndGame() {
+        const s = await get(ref(db, `rooms/${roomCode}/players`));
+        const ps = Object.values(s.val()).filter(p => p.pts > 0);
+        if(ps.length === 1) update(ref(db, `rooms/${roomCode}`), { winner: ps[0].name });
+    }
+
+    function showWin(n) { document.getElementById('winScreen').style.display='flex'; document.getElementById('winnerName').innerText=n; }
+</script>
+</body>
+</html>
